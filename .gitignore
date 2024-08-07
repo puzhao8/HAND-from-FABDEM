@@ -1,0 +1,6 @@
+data
+outputs
+DEM
+__pycache__
+*.pyc
+tutorials
