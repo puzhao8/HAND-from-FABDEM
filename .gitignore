@@ -4,3 +4,6 @@ DEM
 __pycache__
 *.pyc
 tutorials
+satellogic.py
+hand_acc100
+hand_acc100_uint16

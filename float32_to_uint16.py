@@ -2,6 +2,7 @@
 import os
 import numpy as np
 import rasterio
+from tqdm import tqdm
 from rasterio import Affine
 from rasterio.enums import Resampling
 
@@ -12,7 +13,7 @@ def convert_geotiff_to_uint16(input_file, output_file, nodata_value = 65535):
         data = src.read(1).astype(np.float32)  # Assuming single-band GeoTIFF
         
         # Normalize and scale the data to uint16
-        data = data * 10
+        # data = data * 10
         data[np.isnan(data)] = nodata_value
         data_uint16 = data.astype(np.uint16)
         # data_uint16[np.isnan(data_uint16)] = 10000
@@ -34,16 +35,20 @@ if __name__ == "__main__":
     from pathlib import Path
     current_directory = os.getcwd()
 
-    in_folder = Path("hand_acc100")
-    out_folder = Path("hand_acc100_uint16")
+    in_folder = Path("outputs/flow_acc")
+    out_folder = Path("outputs/flow_acc_uint16")
+    out_folder.mkdir(exist_ok=True, parents=True)
     # print(os.listdir(in_folder))
 
-    fileList = [f for f in os.listdir(in_folder) if f.startswith("acc") and f.endswith(".tif")]
+    fileList = [f for f in os.listdir(in_folder) if f.startswith("flow_acc") and f.endswith(".tif")]
     # print(fileList)
 
-    for filename in fileList:
-        print(filename)
-
+    for filename in tqdm(fileList):
         input_file = in_folder / filename
-        output_file = out_folder / f"flow_{filename}"
-        convert_geotiff_to_uint16(input_file, output_file)
+        output_file = out_folder / filename
+
+        if not output_file.exists():
+            print(filename)
+            convert_geotiff_to_uint16(input_file, output_file)
+
+

@@ -2,18 +2,19 @@
 # Please contact PUZH@dhigroup.com if you encounter any problem with this script.
 
 import zipfile, os
+import time
 from pathlib import Path
 
 import ee
 ee.Initialize()
 
 
-def upload_image_into_gee_from_gs(filename):
-    ''' upload image into GEE from Google Cloud Storge'''
+# def upload_image_into_gee_from_gs(filename):
+#     ''' upload image into GEE from Google Cloud Storge'''
 
-    asset_id = f'{eeImgCol}/{filename[:-4]}'
-    # print(f'{index}: {asset_id}')
-    os.system(f"earthengine upload image --force --asset_id={asset_id} --pyramiding_policy=sample --nodata_value=0 {gs_dir}/{filename}")
+#     asset_id = f'{eeImgCol}/{filename[:-4]}'
+#     # print(f'{index}: {asset_id}')
+#     os.system(f"earthengine upload image --force --asset_id={asset_id} --pyramiding_policy=sample --nodata_value=0 {gs_dir}/{filename}")
 
 
 # Function to upload a GeoTIFF file to GEE and set properties
@@ -22,17 +23,20 @@ def upload_geotiff_with_properties(filepath):
     filename = os.path.basename(filepath).split('.')[0]
     
     # Set the asset ID (where the asset will be stored in your GEE account)
-    asset_id = f'projects/global-wetland-watch/assets/features/hand/{filename}'
+    asset_id = f"{eeImgCol}/{filename}"
+
+    cur_time = int(time.time() * 1000)
     
     # Define properties to set on the asset
     properties = {
         # 'source': 'My Data Source',
-        'generated_date': '2024-08-07',
-        'product': 'hand_100',
-        'acc_thresh': 100,
+        'generated_time': cur_time,
+        'product': 'flow_accumulation',
         'dem': 'FABDEM',
         'basin_level': 5,
-        'basin_id': filename.split("_")[-1]
+        'basin_id': filename.split("_")[-1],
+        'time_start': cur_time,
+        'time_end': cur_time,
     }
     
     # Create an ingestion request with properties
@@ -70,29 +74,19 @@ if __name__ == "__main__":
     
     ''' batch upload local geotiffs to GEE '''
     # create an asset of ImageCollection in GEE, and bucket in GCP
-    eeImgCol = 'projects/global-wetland-watch/assets/features/hand' # asset folder in GEE asset
-    gs_dir = 'gs://hand_from_fabdem/hand_acc100_uint16' # Google Storage Folder
+    eeImgCol = 'projects/global-wetland-watch/assets/features/flow_accumulation' # asset folder in GEE asset
+    gs_dir = 'gs://hand_from_fabdem' # Google Storage Folder
 
     # specify data folder
-    data_dir = Path(r"C:\Users\puzh\Downloads\GWL_FCS30") # local ZIP data folder
-    out_dir = Path(r"C:\DHI\HAND\hand_acc100_uint16") # extracted folder
+    folder = 'flow_acc_uint16'
+    data_dir = Path(f"outputs/{folder}") # extracted folder
 
-    # # extract zip into the same folder
-    if False: 
-        for filename in os.listdir(data_dir):
-            if filename.endswith('.zip'):
-                print(filename)
+    os.system(f"gsutil -m cp -r {data_dir} {gs_dir}/")
 
-                with zipfile.ZipFile(data_dir / filename,"r") as zip_ref:
-                    zip_ref.extractall(out_dir)
-                    
-    # upload all geotiff into Google Cloud Storage (GS)
-    # os.system(f"gsutil -m cp -r {out_dir} {gs_dir}/")
-
-# batch upload from GS
-fileList = [f for f in os.listdir(Path(out_dir)) if f.endswith('.tif')]
-for filename in fileList:
-    # upload_image_into_gee_from_gs(filename)
-    print()
-    print(f"------------------ {filename} ------------------")
-    upload_geotiff_with_properties(f"{gs_dir}/hand_acc100_uint16/{filename}")
+    # batch upload from GS
+    fileList = [f for f in os.listdir(Path(data_dir)) if f.startswith('flow_acc') and f.endswith('.tif')]
+    for filename in fileList:
+        # upload_image_into_gee_from_gs(filename)
+        print()
+        print(f"------------------ {filename} ------------------")
+        upload_geotiff_with_properties(f"{gs_dir}/{folder}/{filename}")

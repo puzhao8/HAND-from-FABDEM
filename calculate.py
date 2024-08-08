@@ -135,7 +135,7 @@ def calculate_hand(dem_array, dem_affine: rasterio.Affine, dem_crs: rasterio.crs
     #     grid = sGrid.from_raster(str(temp_file.name))
     #     dem = grid.read_raster(str(temp_file.name))
 
-    out_path = Path("C:/DHI/HAND/outputs/tmp_dir")
+    out_path = Path("outputs/tmp_dir")
     out_name = str(out_path / "fabdem.tif")
     write_cog(out_name, dem_array,
                   transform=dem_affine.to_gdal(), epsg_code=dem_crs.to_epsg(),
@@ -168,7 +168,6 @@ def calculate_hand(dem_array, dem_affine: rasterio.Affine, dem_crs: rasterio.crs
 
     log.info(f'Calculating HAND using accumulation threshold of {acc_thresh}')
     hand = grid.compute_hand(flow_dir, inflated_dem, acc > acc_thresh, inplace=False)
-
 
     # write acc raster
     acc[basin_mask] = np.nan
@@ -219,17 +218,18 @@ def calculate_hand_for_basins(out_raster:  Union[str, Path], geometries: Geometr
 
         hand, acc = calculate_hand(basin_array, basin_affine_tf, src.crs, basin_mask, acc_thresh=acc_thresh)
 
+        # TODO: Are these lines necessary ?!! Just rescale here?
         # convert datatype
         hand = to_uint16(hand * 10, nodata_value=nodata_value) # rescaled by 10
         flow_acc = to_uint16(acc, nodata_value=nodata_value) 
 
-        # write hand
+        # write hand, note NaN is not compatible with uint16 data type.
         write_cog(
-            out_raster, hand, transform=basin_affine_tf.to_gdal(), epsg_code=src.crs.to_epsg(), nodata_value=nodata_value) # np.nan
+            out_raster, hand, transform=basin_affine_tf.to_gdal(), epsg_code=src.crs.to_epsg(), nodata_value=nodata_value, dtype=gdal.GDT_UInt16) # np.nan
 
         # write accumlation if not exists
         filename = os.path.basename(out_raster) # hand_[100/1000]_basin5_id_6050942390.tif
         flow_acc_url = Path(f"outputs/flow_acc/flow_acc_basin{filename.split('basin')[-1]}") # flow_acc_basin5_id_6050942390.tif
         if not flow_acc_url.exists():
-            write_cog(flow_acc_url, flow_acc, transform=basin_affine_tf.to_gdal(), epsg_code=src.crs.to_epsg(), nodata_value=nodata_value)
+            write_cog(flow_acc_url, flow_acc, transform=basin_affine_tf.to_gdal(), epsg_code=src.crs.to_epsg(), nodata_value=nodata_value, dtype=gdal.GDT_UInt16)
         

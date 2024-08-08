@@ -34,7 +34,7 @@ def prepare_fabdem_vrt(vrt: Union[str, Path], geometry: Union[ogr.Geometry, Base
     """
 
     if 'fabdem' == dem:
-        DEM_GEOJSON = 'C:/DHI/HAND/DEM/FABDEM_v1-2_tiles.geojson'
+        DEM_GEOJSON = 'data/FABDEM_v1-2_tiles.geojson'
 
     with GDALConfigManager(GDAL_DISABLE_READDIR_ON_OPEN='EMPTY_DIR'):
         if isinstance(geometry, BaseGeometry):
@@ -97,17 +97,22 @@ if __name__ == "__main__":
     acc_thresh = 100 # accumulation threshold
     fabdem_path = Path("data/FABDEM/sa")
 
-    hand_path = Path(f"hand_acc{acc_thresh}")
+    hand_path = Path(f"outputs/hand_acc{acc_thresh}")
     hand_path.mkdir(exist_ok=True, parents=True)
     
     # Italy, northern Algeria, Kenya, Uganda, South Africa, Australia 
-    hydroBASIN = gpd.read_file("hydroBASIN/hybas_sa_lev05_v1c\hybas_sa_lev05_v1c.zip")
+    basin_lv5 = gpd.read_file("data/hydroBASIN/hybas_sa_lev05_v1c.zip")
+    basin_lv6 = gpd.read_file("data/hydroBASIN/hybas_sa_lev06_v1c.zip")
+    
+    from constant import missing_ids_lv6
 
-    # basinIdList = [6050068100, 6050000740, 6050070260, 6050069460, 6050070270, 6050068110] # 6050069430
+    hydroBASIN = basin_lv6[basin_lv6.HYBAS_ID.isin(missing_ids_lv6)]
+    print(hydroBASIN)
+
     # for idx, hybas_id in enumerate(tqdm([6050000750])): # 6050068100, 6050000740
     for idx, hybas_id in enumerate(tqdm(hydroBASIN.HYBAS_ID.unique())): #  6050069460, 6050001940, 6050266740
 
-        if idx >= 388: # 388
+        if idx >= 0: # 388
             basin = hydroBASIN[hydroBASIN.HYBAS_ID==hybas_id] # 6050069460
 
             print(f"=============================== idx: {idx}, hybas_id: {hybas_id} ===================================")
