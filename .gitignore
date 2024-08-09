@@ -1,4 +1,5 @@
-data
+*.tif
+*.zip
 outputs
 DEM
 __pycache__
