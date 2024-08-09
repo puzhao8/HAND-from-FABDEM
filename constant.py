@@ -1,5 +1,20 @@
 
 # missing_ids: https://code.earthengine.google.com/b0dd82a915d8e2aa5b96262cf7fbcfc6
+# filter basin ids by country: https://code.earthengine.google.com/8affe11636ad1f23f268c7353fd67ad1 
+italy_ids_lv5 = [
+  2050012730,
+  2050013020,
+  2050012960,
+  2050012980,
+  2050013010,
+  2050013100,
+  2050013110,
+  2050014550,
+  2050046500,
+  2050047500,
+  2050012000,
+  2050540100
+]
 
 missing_ids_lv5 = [
    6050294360

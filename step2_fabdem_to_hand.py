@@ -96,16 +96,24 @@ if __name__ == "__main__":
     import geopandas as gpd
 
     acc_thresh = 100 # accumulation threshold
-    fabdem_path = Path("data/FABDEM/sa")
+    fabdem_path = Path("data/FABDEM/tiles")
 
     hand_path = Path(f"outputs/hand_acc{acc_thresh}")
     hand_path.mkdir(exist_ok=True, parents=True)
     
-    # Italy, northern Algeria, Kenya, Uganda, South Africa, Australia 
-    hydroBASIN = gpd.read_file("data/hydroBASIN/hybas_sa_lev05_v1c.zip")
+    # TODO: change basin source!
+    # Italy, northern Algeria, Kenya, Uganda, South Africa / East Africa, Australia 
+    hydroBASIN = gpd.read_file("data/hydroBASIN/hybas_eu_lev05_v1c.zip")
 
-    from constant import missing_ids
-    for idx, hybas_id in enumerate(tqdm(missing_ids)): # 6050068100, 6050000740
+    # from constant import missing_ids
+    from step1_download_fabdem_by_country import query_by_country
+    _, hybas_ids = query_by_country(country_name='Italy')
+
+    print('hybas_ids')
+    print(hybas_ids)
+    print(f'{len(hybas_ids)} basins to be generted ...')
+
+    for idx, hybas_id in enumerate(tqdm(hybas_ids)): # 6050068100, 6050000740
     # for idx, hybas_id in enumerate(tqdm(hydroBASIN.HYBAS_ID.unique())): #  6050069460, 6050001940, 6050266740
 
         # if (idx >= 288) and (idx < 388): # 288 -> 387

@@ -123,7 +123,7 @@ if __name__ == "__main__":
 
             start_time = time.time()
 
-            fabdem_vrt = Path("outputs") / f'fabdem_basin5_id_{hybas_id}.vrt'
+            fabdem_vrt = Path("outputs") / 'vrt' / f'fabdem_basin5_id_{hybas_id}.vrt'
             prepare_fabdem_vrt(vrt=fabdem_vrt, geometry=basin_geo, dem='fabdem', fabdem_path=fabdem_path)
 
             from calculate import calculate_hand_for_basins

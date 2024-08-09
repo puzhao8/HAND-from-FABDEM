@@ -1,8 +1,8 @@
 # This code should be run in python environment, requires earthengine-api, gcoud etc.
 # Please contact PUZH@dhigroup.com if you encounter any problem with this script.
 
-import zipfile, os
 import time
+import zipfile, os
 from pathlib import Path
 
 import ee
@@ -18,22 +18,21 @@ ee.Initialize()
 
 
 # Function to upload a GeoTIFF file to GEE and set properties
-def upload_geotiff_with_properties(filepath):
+def upload_geotiff_with_properties(filepath, acc_thresh=1000, basin_level=5):
     # Extract the filename without extension for asset name
     filename = os.path.basename(filepath).split('.')[0]
     
     # Set the asset ID (where the asset will be stored in your GEE account)
     asset_id = f"{eeImgCol}/{filename}"
-
-    cur_time = int(time.time() * 1000)
     
+    cur_time = int(time.time() * 1000)
     # Define properties to set on the asset
     properties = {
         # 'source': 'My Data Source',
         'generated_time': cur_time,
-        'product': 'flow_accumulation',
+        'product': f'flow_accumulation',
         'dem': 'FABDEM',
-        'basin_level': 5,
+        'basin_level': basin_level,
         'basin_id': filename.split("_")[-1],
         'time_start': cur_time,
         'time_end': cur_time,
@@ -72,16 +71,23 @@ def upload_geotiff_with_properties(filepath):
 
 if __name__ == "__main__":
     
+
+    # specify data folder
+    basin_level = 6
+    acc_thresh = 100
+
+    folder = f"flow_acc"
+    data_dir = Path(f"C:/DHI/HAND-from-FABDEM/outputs/{folder}") # extracted folder
+    print(data_dir)
+
     ''' batch upload local geotiffs to GEE '''
     # create an asset of ImageCollection in GEE, and bucket in GCP
     eeImgCol = 'projects/global-wetland-watch/assets/features/flow_accumulation' # asset folder in GEE asset
     gs_dir = 'gs://hand_from_fabdem' # Google Storage Folder
 
-    # specify data folder
-    folder = 'flow_acc_uint16'
-    data_dir = Path(f"outputs/{folder}") # extracted folder
 
-    os.system(f"gsutil -m cp -r {data_dir} {gs_dir}/")
+    if False:
+        os.system(f"gsutil -m cp -r {data_dir} {gs_dir}/")
 
     # batch upload from GS
     fileList = [f for f in os.listdir(Path(data_dir)) if f.startswith('flow_acc') and f.endswith('.tif')]
@@ -89,4 +95,10 @@ if __name__ == "__main__":
         # upload_image_into_gee_from_gs(filename)
         print()
         print(f"------------------ {filename} ------------------")
-        upload_geotiff_with_properties(f"{gs_dir}/{folder}/{filename}")
+
+        id = filename.split('_id_')[-1][:-4]
+        if id.startswith('2050'):
+            print(f"id: {id}, basin: 5")
+            upload_geotiff_with_properties(f"{gs_dir}/{folder}/{filename}", basin_level=5)
+        else:
+            upload_geotiff_with_properties(f"{gs_dir}/{folder}/{filename}", basin_level=basin_level)

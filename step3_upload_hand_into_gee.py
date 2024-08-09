@@ -18,7 +18,7 @@ ee.Initialize()
 
 
 # Function to upload a GeoTIFF file to GEE and set properties
-def upload_geotiff_with_properties(filepath):
+def upload_geotiff_with_properties(filepath, acc_thresh=1000, basin_level=5):
     # Extract the filename without extension for asset name
     filename = os.path.basename(filepath).split('.')[0]
     
@@ -30,10 +30,10 @@ def upload_geotiff_with_properties(filepath):
     properties = {
         # 'source': 'My Data Source',
         'generated_time': cur_time,
-        'product': 'hand_100',
-        'acc_thresh': 100,
+        'product': f'hand_{acc_thresh}',
+        'acc_thresh': acc_thresh,
         'dem': 'FABDEM',
-        'basin_level': 5,
+        'basin_level': basin_level,
         'basin_id': filename.split("_")[-1],
         'time_start': cur_time,
         'time_end': cur_time,
@@ -72,17 +72,23 @@ def upload_geotiff_with_properties(filepath):
 
 if __name__ == "__main__":
     
+
+    # specify data folder
+    basin_level = 5
+    acc_thresh = 100
+
+    folder = f"hand_acc{acc_thresh}"
+    data_dir = Path(f"C:/DHI/HAND-from-FABDEM/outputs/{folder}") # extracted folder
+    print(data_dir)
+
     ''' batch upload local geotiffs to GEE '''
     # create an asset of ImageCollection in GEE, and bucket in GCP
     eeImgCol = 'projects/global-wetland-watch/assets/features/hand' # asset folder in GEE asset
     gs_dir = 'gs://hand_from_fabdem' # Google Storage Folder
 
-    # specify data folder
-    folder = "hand_acc100_uint16"
-    data_dir = Path(f"C:/DHI/HAND-from-FABDEM/outputs/{folder}") # extracted folder
-    print(data_dir)
 
-    if False:
+
+    if True:
         os.system(f"gsutil -m cp -r {data_dir} {gs_dir}/")
 
     # batch upload from GS
@@ -91,4 +97,4 @@ if __name__ == "__main__":
         # upload_image_into_gee_from_gs(filename)
         print()
         print(f"------------------ {filename} ------------------")
-        upload_geotiff_with_properties(f"{gs_dir}/{folder}/{filename}")
+        upload_geotiff_with_properties(f"{gs_dir}/{folder}/{filename}", acc_thresh=acc_thresh, basin_level=basin_level)

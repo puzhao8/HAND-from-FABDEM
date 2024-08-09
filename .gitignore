@@ -2,6 +2,8 @@ data
 outputs
 DEM
 __pycache__
+main_jupyter.ipynb
+.vscode
 *.pyc
 tutorials
 satellogic.py
