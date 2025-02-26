@@ -6,6 +6,7 @@ import argparse
 import logging
 import os, sys
 import warnings
+import time
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Optional, Union
@@ -94,7 +95,7 @@ def fill_hand(hand: np.ndarray, dem: np.ndarray):
     return hand
 
 def calculate_hand(dem_array, dem_affine: rasterio.Affine, dem_crs: rasterio.crs.CRS, basin_mask,
-                   acc_thresh: Optional[int] = 100):
+                   acc_thresh: List[int] = [100, 1000], hybas_id: str = None):
     """Calculate the Height Above Nearest Drainage (HAND)
 
      Calculate the Height Above Nearest Drainage (HAND) using pySHEDS library. Because HAND
@@ -135,16 +136,23 @@ def calculate_hand(dem_array, dem_affine: rasterio.Affine, dem_crs: rasterio.crs
     #     grid = sGrid.from_raster(str(temp_file.name))
     #     dem = grid.read_raster(str(temp_file.name))
 
-    out_path = Path("outputs/tmp_dir")
-    out_name = str(out_path / "fabdem.tif")
-    write_cog(out_name, dem_array,
+    dem_folder = Path("outputs/dem")
+    dem_folder.mkdir(exist_ok=True, parents=True)
+    dem_url = str(dem_folder / f"dem_{hybas_id}.tif")
+    write_cog(dem_url, dem_array,
                   transform=dem_affine.to_gdal(), epsg_code=dem_crs.to_epsg(),
                   # Prevents PySheds from assuming using zero as the nodata value
                   nodata_value=nodata_fill_value)
 
     # From PySheds; see example usage: http://mattbartos.com/pysheds/
-    grid = sGrid.from_raster(out_name)
-    dem = grid.read_raster(out_name)
+    grid = sGrid.from_raster(dem_url)
+    dem = grid.read_raster(dem_url)
+
+    # rmove dem.tiff
+    try:
+        Path(dem_url).unlink()
+    except:
+        print(f"Failed to delete {dem_url}")
 
     log.info('Fill pits in DEM')
     pit_filled_dem = grid.fill_pits(dem)
@@ -163,40 +171,54 @@ def calculate_hand(dem_array, dem_affine: rasterio.Affine, dem_crs: rasterio.crs
     log.info('Calculating flow accumulation')
     acc = grid.accumulation(flow_dir)
 
-    if acc_thresh is None:
-        acc_thresh = acc.mean()
+    def derive_hand_from_flow_acc(flow_acc, acc_th=1000):
+        start_time = time.time()
 
-    log.info(f'Calculating HAND using accumulation threshold of {acc_thresh}')
-    hand = grid.compute_hand(flow_dir, inflated_dem, acc > acc_thresh, inplace=False)
+        if True:
+            if acc_th is None:
+                acc_th = acc.mean()
 
-    # write acc raster
+            log.info(f'Calculating HAND using accumulation threshold of {acc_th}')
+            hand = grid.compute_hand(flow_dir, inflated_dem, flow_acc > acc_th, inplace=False)
+
+            if np.isnan(hand).any():
+                log.info('Filling NaNs in the HAND')
+                # mask outside of basin with a not-NaN value to prevent NaN-filling outside of basin (optimization)
+                hand[basin_mask] = nodata_fill_value
+                hand = fill_hand(hand, dem_array)
+
+            # # set pixels outside of basin to nodata
+            hand[basin_mask] = np.nan
+
+        end_time = time.time()
+        elapsed_time = end_time - start_time
+        print(f'elapsed_time (minutes) of compute_hand (acc_th: {acc_th}): {elapsed_time / 60 :.2f}')
+
+        return hand
+
+    # derive hand using various thresholds specified in a given list
+    hand_list = []
+    for acc_th in acc_thresh:
+        hand = derive_hand_from_flow_acc(flow_acc=acc, acc_th=acc_th)
+        hand_list.append(hand)
+
     acc[basin_mask] = np.nan
 
-    if np.isnan(hand).any():
-        log.info('Filling NaNs in the HAND')
-        # mask outside of basin with a not-NaN value to prevent NaN-filling outside of basin (optimization)
-        hand[basin_mask] = nodata_fill_value
-        hand = fill_hand(hand, dem_array)
-
-    # # TODO: rescale hand by 10 to save space
-    # hand = hand * 10
-    # hand = hand.astype(np.uint16)
-    # hand[basin_mask] = 65535
-
-    # # set pixels outside of basin to nodata
-    hand[basin_mask] = np.nan
-
     # TODO: also mask ocean pixels here?
-
-    return hand, acc
+    return hand_list, acc
 
 def to_uint16(data, nodata_value=65535):
     # convert datatype from float32 into uint16
     data[np.isnan(data)] = nodata_value
     return data.astype(np.uint16)
 
+def to_uint32(data, nodata_value=4294967295):
+    # convert datatype from float32 into uint16
+    data[np.isnan(data)] = nodata_value
+    return data.astype(np.uint32)
+
 def calculate_hand_for_basins(out_raster:  Union[str, Path], geometries: GeometryCollection,
-                              dem_file: Union[str, Path], acc_thresh: Optional[int] = 100):
+                              dem_file: Union[str, Path], acc_thresh: List[int] = [100,1000], hybas_id: str = None):
     """Calculate the Height Above Nearest Drainage (HAND) for watershed boundaries (hydrobasins).
 
     For watershed boundaries, see: https://www.hydrosheds.org/page/hydrobasins
@@ -209,27 +231,36 @@ def calculate_hand_for_basins(out_raster:  Union[str, Path], geometries: Geometr
             If `None`, the mean accumulation value is used
     """
 
-    nodata_value = 65535
+    nodata_value_uint16 = 65535
+    nodata_value_uint32 = 4294967295
+
     with rasterio.open(dem_file) as src:
         basin_mask, basin_affine_tf, basin_window = rasterio.mask.raster_geometry_mask(
             src, geometries.geoms, all_touched=True, crop=True, pad=True, pad_width=1
         )
         basin_array = src.read(1, window=basin_window)
 
-        hand, acc = calculate_hand(basin_array, basin_affine_tf, src.crs, basin_mask, acc_thresh=acc_thresh)
+        ## reduce the elevation of river centerline
+        # merit_upg = is from GEE
+        # basin_array = basin_array.where(merit_upg.gt(20000), basin_array - 1)
 
-        # TODO: Are these lines necessary ?!! Just rescale here?
-        # convert datatype
-        hand = to_uint16(hand * 10, nodata_value=nodata_value) # rescaled by 10
-        flow_acc = to_uint16(acc, nodata_value=nodata_value) 
-
-        # write hand, note NaN is not compatible with uint16 data type.
-        write_cog(
-            out_raster, hand, transform=basin_affine_tf.to_gdal(), epsg_code=src.crs.to_epsg(), nodata_value=nodata_value, dtype=gdal.GDT_UInt16) # np.nan
+        hand_list, flow_acc = calculate_hand(basin_array, basin_affine_tf, src.crs, basin_mask, acc_thresh=acc_thresh, hybas_id=hybas_id)
+        
 
         # write accumlation if not exists
-        filename = os.path.basename(out_raster) # hand_[100/1000]_basin5_id_6050942390.tif
-        flow_acc_url = Path(f"outputs/flow_acc/flow_acc_basin{filename.split('basin')[-1]}") # flow_acc_basin5_id_6050942390.tif
-        if not flow_acc_url.exists():
-            write_cog(flow_acc_url, flow_acc, transform=basin_affine_tf.to_gdal(), epsg_code=src.crs.to_epsg(), nodata_value=nodata_value, dtype=gdal.GDT_UInt16)
+        filename = os.path.basename(out_raster) # hand_acc_thresh_basin5_id_6050942390.tif
+        hand_dir = out_raster.parent
+
+        # Loop over all acc_thresh.
+        for acc_th, hand in zip(acc_thresh, hand_list):
+            hand_url = hand_dir / filename.replace('acc_thresh', str(acc_th))
+            write_cog(hand_url, to_uint16(hand * 10), transform=basin_affine_tf.to_gdal(), epsg_code=src.crs.to_epsg(), nodata_value=nodata_value_uint16, dtype=gdal.GDT_UInt16) # np.nan
+            
+
+        flow_acc_folder = Path(f"outputs/flow_acc_uint32")
+        flow_acc_folder.mkdir(exist_ok=True, parents=True)
+        flow_acc_url = flow_acc_folder / f"flow_acc_basin{filename.split('basin')[-1]}" # flow_acc_basin5_id_6050942390.tif
+        
+        # write_cog(flow_acc_url, flow_acc, transform=basin_affine_tf.to_gdal(), epsg_code=src.crs.to_epsg(), nodata_value=nodata_value, dtype=gdal.GDT_UInt16)
+        write_cog(flow_acc_url, to_uint32(flow_acc, nodata_value=0), transform=basin_affine_tf.to_gdal(), epsg_code=src.crs.to_epsg(), nodata_value=0, dtype=gdal.GDT_UInt32) # UInt32
         

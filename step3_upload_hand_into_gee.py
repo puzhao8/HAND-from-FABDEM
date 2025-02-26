@@ -75,10 +75,14 @@ if __name__ == "__main__":
 
     # specify data folder
     basin_level = 5
-    acc_thresh = 100
+    # acc_thresh = 1000
 
-    folder = f"hand_acc{acc_thresh}"
+    folder = f"hand_uint16"
     data_dir = Path(f"C:/DHI/HAND-from-FABDEM/outputs/{folder}") # extracted folder
+    # data_dir = Path(f"//dkcph1-nas02/jupyterhub-exchange/puzhao8/projects/HAND-from-FABDEM/outputs/{folder}")
+    
+    # data_dir = Path(f"C:/DHI/HAND-from-FABDEM/outputs/hand_uint16")
+    # folder = "hand_uint16"
     print(data_dir)
 
     ''' batch upload local geotiffs to GEE '''
@@ -95,6 +99,7 @@ if __name__ == "__main__":
     fileList = [f for f in os.listdir(Path(data_dir)) if f.startswith('hand') and f.endswith('.tif')]
     for filename in fileList:
         # upload_image_into_gee_from_gs(filename)
+        acc_thresh = int(filename.split('_')[1])
         print()
         print(f"------------------ {filename} ------------------")
         upload_geotiff_with_properties(f"{gs_dir}/{folder}/{filename}", acc_thresh=acc_thresh, basin_level=basin_level)

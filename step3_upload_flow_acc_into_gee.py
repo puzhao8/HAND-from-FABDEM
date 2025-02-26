@@ -36,6 +36,7 @@ def upload_geotiff_with_properties(filepath, acc_thresh=1000, basin_level=5):
         'basin_id': filename.split("_")[-1],
         'time_start': cur_time,
         'time_end': cur_time,
+        # 'pyramidingPolicy': {'b1': 'sample'}
     }
     
     # Create an ingestion request with properties
@@ -73,11 +74,13 @@ if __name__ == "__main__":
     
 
     # specify data folder
-    basin_level = 6
-    acc_thresh = 100
+    basin_level = 5
+    acc_thresh = 1000
 
-    folder = f"flow_acc"
+    folder = f"flow_acc_uint32"
     data_dir = Path(f"C:/DHI/HAND-from-FABDEM/outputs/{folder}") # extracted folder
+    # data_dir = Path(f"//dkcph1-nas02/jupyterhub-exchange/puzhao8/projects/HAND-from-FABDEM/outputs/{folder}")
+
     print(data_dir)
 
     ''' batch upload local geotiffs to GEE '''
@@ -86,7 +89,7 @@ if __name__ == "__main__":
     gs_dir = 'gs://hand_from_fabdem' # Google Storage Folder
 
 
-    if False:
+    if True:
         os.system(f"gsutil -m cp -r {data_dir} {gs_dir}/")
 
     # batch upload from GS

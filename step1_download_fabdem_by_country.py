@@ -49,6 +49,7 @@ def download_files_in_parallel(urls, dst_folder):
         for url in urls:
             local_filename = os.path.join(dst_folder, url.split('/')[-1])
             futures.append(executor.submit(download_file_with_progress, url, local_filename))
+
         for future in concurrent.futures.as_completed(futures):
             try:
                 future.result()
@@ -101,6 +102,7 @@ if __name__ == "__main__":
 
     # FABDEM: https://data.bris.ac.uk/data/dataset/s5hqmjcdj8yo2ibzi9b4ew3sn
     url_root = "https://data.bris.ac.uk/datasets/s5hqmjcdj8yo2ibzi9b4ew3sn/" 
+    # wget https://data.bris.ac.uk/datasets/s5hqmjcdj8yo2ibzi9b4ew3sn/N30E050-N40E060_FABDEM_V1-2.zip
 
     # region = "sa"
 
@@ -111,7 +113,7 @@ if __name__ == "__main__":
     # zipFileList = tiles_filtered.zipfile_name.unique()
     # print(f"number of tiles in {region}: {len(zipFileList)}")
 
-    region = 'Italy'
+    region = 'Malaysia'
     zipFileList, basin_ids = query_by_country(country_name=region)
     
 

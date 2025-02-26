@@ -5,8 +5,6 @@
 # check failed hybas_id (from level-5 to level-6): https://code.earthengine.google.com/1a094d97538255a5039a6d36db002a07
 # compare hand: https://code.earthengine.google.com/760177edebe0ba65bf6feb9220a886cb
 
-# missing flow_acc: https://code.earthengine.google.com/4b60ce81f4374fc72c111c3f09748d76
-
 """Prepare a Copernicus GLO-30 DEM virtual raster (VRT) covering a given geometry"""
 import subprocess
 from pathlib import Path
@@ -54,7 +52,6 @@ def prepare_fabdem_vrt(vrt: Union[str, Path], geometry: Union[ogr.Geometry, Base
 
         tile_features = vector.get_features(DEM_GEOJSON)
         if not vector.get_property_values_for_intersecting_features(geometry, tile_features):
-            # return 
             raise ValueError(f'Copernicus GLO-30 DEM does not intersect this geometry: {geometry}')
 
 
@@ -87,7 +84,9 @@ def prepare_fabdem_vrt(vrt: Union[str, Path], geometry: Union[ogr.Geometry, Base
 #     return value
 
 
-
+# Define a timeout handler
+def handler(signum, frame):
+    raise TimeoutError("The operation took too long and was skipped.")
 
 
 def log_error_ids(hybas_id, dst_err_ids: str="outputs/error_ids.txt"):
@@ -95,27 +94,6 @@ def log_error_ids(hybas_id, dst_err_ids: str="outputs/error_ids.txt"):
         log_file.write(f"{hybas_id}\n")
 
 
-import multiprocessing
-
-def run_with_timeout(func, args=(), kwargs={}, timeout=5):
-    """ usage: result = run_with_timeout(long_running_function, timeout=3) """
-
-    with multiprocessing.Manager() as manager:
-        result = manager.list([None])  # Shared memory list to store result
-
-        def target(result_list):
-            result_list[0] = func(*args, **kwargs)
-
-        process = multiprocessing.Process(target=target, args=(result,))
-        process.start()
-        process.join(timeout)
-
-        if process.is_alive():
-            process.terminate()  # Kill the process
-            process.join()
-            return None  # Timeout occurred
-
-        return result[0]
 
 if __name__ == "__main__":
     
@@ -131,27 +109,19 @@ if __name__ == "__main__":
     import geopandas as gpd
 
     # # Set the timeout (in seconds)
-    # timeout = 0.5 * 60 * 60  # 2 hours
+    # timeout = 2 * 60 * 60  # 2 hours
     # # Set the signal handler for the alarm
-    # signal.signal(signal.SIGALRM, handler)
-
-
-
-    # Define a timeout handler
-    def raise_timeout():
-        raise TimeoutError("The operation took too long and was skipped.")
-
-    timeout = threading.Timer(1*60*60, raise_timeout)  # 1-hour timeout
-           
+    # signal.signal(signal.SIGINT, handler)
+                       
     # os.chdir("/home/jovyan/exchange/projects/HAND-from-FABDEM")
     print("Current Working Directory:", os.getcwd())
     
     Path("outputs").mkdir(exist_ok=True, parents=True)
 
     # Italy, northern Algeria, Kenya, Uganda, South Africa / East Africa, Australia 
-    country_name = "eu"
-    query_id_by_country = False # True for querying hybas_id by country, False by HydroBASIN
-    region = 'eu' # sa, as, af, eu: note, region and country_name need to be consistent
+    country_name = "Malaysia"
+    query_id_by_country = True # True for querying hybas_id by country, False by HydroBASIN
+    region = 'as' # as, sa, af, eu: note, region and country_name need to be consistent
 
     acc_thresh = [100, 1000, 100000] # List of Integers, specify a list of accumulation thresholds
     # fabdem_path = Path("data/FABDEM/tiles")
@@ -183,21 +153,25 @@ if __name__ == "__main__":
         dst_err_ids=f'outputs/{region}_error_ids.txt' # where to save error hybas_id
 
     print('hybas_ids')
-    # pprint(hybas_ids)
+    pprint(hybas_ids)
     print(f'{len(hybas_ids)} basins to be generted ...')
     print()
 
-    idx_stopped = list(hybas_ids).index(2050085710)
-    print(f"idx_stopped: {idx_stopped}")
+    # hybas_ids = [
+    #     5050558240,
+    #     5050056460,
+    #     5050060860,
+    #     5050000010,
+    #     5050005830,
 
-    # hybas_ids = []
-    # # for idx, hybas_id in enumerate(tqdm([2050014550, 6050029730])): # 2050014550, 6050029730
+    # ]
+    # for idx, hybas_id in enumerate(tqdm([2050014550, 6050029730])): # 2050014550, 6050029730
     for idx, hybas_id in enumerate(tqdm(hybas_ids)): # 6050068100, 6050000740
-    # # for idx, hybas_id in enumerate(tqdm(hydroBASIN.HYBAS_ID.unique())): #  6050069460, 6050001940, 6050266740
+    # for idx, hybas_id in enumerate(tqdm(hydroBASIN.HYBAS_ID.unique())): #  6050069460, 6050001940, 6050266740
 
-        if (idx >= 601): # 333, 433 skiped
+        if (idx >= 7): # skipped id=5
 
-            print(f"idx: {idx}, hybas_id: {hybas_id}")
+            print(idx, hybas_id)
 
             basin = hydroBASIN[hydroBASIN.HYBAS_ID==hybas_id] # 6050069460
 
@@ -205,30 +179,29 @@ if __name__ == "__main__":
             print('basin SUB_AREA', basin.SUB_AREA)
             print('basin UP_AREA', basin.UP_AREA)
 
-            basin_geo_buff = basin.geometry.to_crs("EPSG:3857").buffer(0.2).to_crs("EPSG:4326")
-            basin_geo = GeometryCollection([basin_geo_buff])[0]
+            basin_geo = GeometryCollection([basin.geometry])[0]
+            basin_geo_buff = basin_geo.buffer(0.5)
 
             start_time = time.time()
+            
+            Path("outputs/vrt").mkdir(exist_ok=True, parents=True)
+            fabdem_vrt = Path("outputs/vrt") / f'fabdem_basin5_id_{hybas_id}.vrt'
+            prepare_fabdem_vrt(vrt=str(fabdem_vrt), geometry=basin_geo_buff, dem='fabdem', fabdem_path=fabdem_path)
+
+            from calculate import calculate_hand_for_basins
+            hand_raster =  hand_path / f'hand_acc_thresh_basin5_id_{hybas_id}.tif'
 
             try:
-                Path("outputs/vrt").mkdir(exist_ok=True, parents=True)
-                fabdem_vrt = Path("outputs/vrt") / f'fabdem_basin5_id_{hybas_id}.vrt'
-                prepare_fabdem_vrt(vrt=str(fabdem_vrt), geometry=basin_geo, dem='fabdem', fabdem_path=fabdem_path)
-
-                from calculate import calculate_hand_for_basins
-                hand_raster =  hand_path / f'hand_acc_thresh_basin5_id_{hybas_id}.tif'
-
                 print("calculate_hand_for_basins ...")
+                # signal.alarm(timeout)  # Start the alarm
                 calculate_hand_for_basins(hand_raster, basin_geo, fabdem_vrt, acc_thresh=acc_thresh, hybas_id=hybas_id)
-
+                # signal.alarm(0) # Disable the alarm if the function completes within the timeout
+            
             except (np.core._exceptions._ArrayMemoryError, ValueError) as e:
                 print(f"Exception message: {e}")
                 log_error_ids(hybas_id, dst_err_ids)
-            
+
             end_time = time.time()
             elapsed_time = end_time - start_time
 
             print(f'elapsed_time (minutes): {elapsed_time / 60 :.2f}')
-
-
-        

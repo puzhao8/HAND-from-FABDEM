@@ -1,15 +1,18 @@
 # FABDEM: https://data.bris.ac.uk/data/dataset/s5hqmjcdj8yo2ibzi9b4ew3sn
 # FABDEM in GEE: https://gee-community-catalog.org/projects/fabdem/
 
+# Flow Accumulation Visualization: https://code.earthengine.google.com/eae949c6188239ea0108b9d61cddb9e3
 # check failed hybas_id (from level-5 to level-6): https://code.earthengine.google.com/1a094d97538255a5039a6d36db002a07
 # compare hand: https://code.earthengine.google.com/760177edebe0ba65bf6feb9220a886cb
 
 """Prepare a Copernicus GLO-30 DEM virtual raster (VRT) covering a given geometry"""
+import subprocess
 from pathlib import Path
 from typing import Union
 
 from osgeo import gdal, ogr
 from shapely.geometry.base import BaseGeometry
+from prettyprinter import pprint
 
 from asf_tools import vector
 from asf_tools.util import GDALConfigManager
@@ -54,12 +57,15 @@ def prepare_fabdem_vrt(vrt: Union[str, Path], geometry: Union[ogr.Geometry, Base
 
           # fabdem_path = Path("C:/DHI/HAND/DEM/N00W080-N10W070_FABDEM_V1-2")
           fabdem_path = Path(fabdem_path)
-          dem_file_paths = [fabdem_path / filename for filename in dem_file_names]
+          dem_file_paths = [str(fabdem_path / filename) for filename in dem_file_names]
 
         else:
             dem_file_paths = vector.intersecting_feature_properties(geometry, tile_features, 'file_path')
 
+        print()
+        pprint(f"gdalbuildvrt {str(vrt)} {' '.join(dem_file_paths)}")
         gdal.BuildVRT(str(vrt), dem_file_paths)
+        # subprocess.run(f"gdalbuildvrt {str(vrt)} {' '.join(dem_file_paths)}") #TODO: this line didn't work, check why.
 
 
 # import re
@@ -74,10 +80,9 @@ def prepare_fabdem_vrt(vrt: Union[str, Path], geometry: Union[ogr.Geometry, Base
 #         return new_value
 #     return value
 
-def log_error_ids(hybas_id):
-    with open("outputs/error_ids.txt", "a") as log_file:
-        log_file.write(f"Failed to process file: {hybas_id}\n")
-
+def log_error_ids(hybas_id, dst_err_ids: str="outputs/error_ids.txt"):
+    with open(dst_err_ids, "a") as log_file:
+        log_file.write(f"{hybas_id}\n")
 
 
 
@@ -93,47 +98,87 @@ if __name__ == "__main__":
     # from asf_tools.dem import prepare_dem_vrt
 
     import geopandas as gpd
+                       
+    # os.chdir("/home/jovyan/exchange/projects/HAND-from-FABDEM")
+    print("Current Working Directory:", os.getcwd())
+    
+    Path("outputs").mkdir(exist_ok=True, parents=True)
 
-    acc_thresh = 100 # accumulation threshold
-    fabdem_path = Path("data/FABDEM/sa")
+    # Italy, northern Algeria, Kenya, Uganda, South Africa / East Africa, Australia 
+    country_name = "sa"
+    region = 'sa' # sa, af, eu: note, region and country_name need to be consistent
+    query_id_by_country = False # True for querying hybas_id by country, False by HydroBASIN
 
-    hand_path = Path(f"outputs/hand_acc{acc_thresh}")
+    BASIN_LEVEL = 5
+    acc_thresh = [100, 1000, 100000] # List of Integers, specify a list of accumulation thresholds
+    fabdem_path = Path("data\FABDEM/tiles/mFABDEM")
+    # fabdem_path = Path("//dkcph1-nas02/jupyterhub-exchange/puzhao8/projects/HAND-from-FABDEM/data/FABDEM/tiles")
+
+    hand_path = Path(f"outputs/hand_uint16_test")
     hand_path.mkdir(exist_ok=True, parents=True)
     
-    # Italy, northern Algeria, Kenya, Uganda, South Africa, Australia 
-    basin_lv5 = gpd.read_file("data/hydroBASIN/hybas_sa_lev05_v1c.zip")
-    basin_lv6 = gpd.read_file("data/hydroBASIN/hybas_sa_lev06_v1c.zip")
-    
-    from constant import missing_ids_lv6
+    # TODO: change basin source!
+    hydroBASIN = gpd.read_file(f"data/hydroBASIN/hybas_{region}_lev05_v1c.zip")
 
-    hydroBASIN = basin_lv6[basin_lv6.HYBAS_ID.isin(missing_ids_lv6)]
-    print(hydroBASIN)
+    if BASIN_LEVEL == 6:
+        # basin level 6
+        print(f"basin level: {BASIN_LEVEL}")
+        from constant import sa_missing_ids_lv6 as missing_ids_lv6
+        pprint(f"missing ids: {len(missing_ids_lv6)}")
+        pprint(missing_ids_lv6)
 
-    # for idx, hybas_id in enumerate(tqdm([6050000750])): # 6050068100, 6050000740
-    for idx, hybas_id in enumerate(tqdm(hydroBASIN.HYBAS_ID.unique())): #  6050069460, 6050001940, 6050266740
+        basin_lv6 = gpd.read_file(f"data/hydroBASIN/hybas_{region}_lev06_v1c.zip")
+        hydroBASIN = basin_lv6[basin_lv6.HYBAS_ID.isin(missing_ids_lv6)]
+        print(hydroBASIN)
 
-        if idx >= 0: # 388
+    if query_id_by_country: # query hybas_id by country
+        print(f"query hybas_id by country: {country_name}.")
+        from step1_download_fabdem_by_country import query_by_country
+        _, hybas_ids = query_by_country(country_name=country_name)
+
+        dst_err_ids=f'outputs/{country_name}_error_ids.txt' # where to save error hybas_id
+               
+    else: # query hybas_id from HydroBASIN
+        print(f"query hybas_id from HydroBASIN for region: {region}.")
+        hybas_ids = hydroBASIN.HYBAS_ID.unique()
+
+        dst_err_ids=f'outputs/{region}_error_ids.txt' # where to save error hybas_id
+
+    print('hybas_ids')
+    pprint(hybas_ids)
+    print(f'{len(hybas_ids)} basins to be generted ...')
+    print()
+
+    for idx, hybas_id in enumerate(tqdm([6050280410])): # 2050014550, 6050029730
+    # for idx, hybas_id in enumerate(tqdm(hybas_ids)): # 6050068100, 6050000740
+    # for idx, hybas_id in enumerate(tqdm(hydroBASIN.HYBAS_ID.unique())): #  6050069460, 6050001940, 6050266740
+
+        if (idx >= 0):
+
             basin = hydroBASIN[hydroBASIN.HYBAS_ID==hybas_id] # 6050069460
 
             print(f"=============================== idx: {idx}, hybas_id: {hybas_id} ===================================")
             print('basin SUB_AREA', basin.SUB_AREA)
             print('basin UP_AREA', basin.UP_AREA)
 
-            basin_geo = GeometryCollection([basin.geometry])[0]
+            basin_geo = GeometryCollection([basin.geometry.to_crs("EPSG:3857").buffer(0.5).to_crs("EPSG:4326")])[0]  # buffer size: 0.5
 
             start_time = time.time()
-
-            fabdem_vrt = Path("outputs") / 'vrt' / f'fabdem_basin5_id_{hybas_id}.vrt'
-            prepare_fabdem_vrt(vrt=fabdem_vrt, geometry=basin_geo, dem='fabdem', fabdem_path=fabdem_path)
+            
+            Path("outputs/vrt").mkdir(exist_ok=True, parents=True)
+            fabdem_vrt = Path("outputs/vrt") / f'fabdem_basin5_id_{hybas_id}.vrt'
+            prepare_fabdem_vrt(vrt=str(fabdem_vrt), geometry=basin_geo, dem='fabdem', fabdem_path=fabdem_path)
 
             from calculate import calculate_hand_for_basins
-            hand_raster =  hand_path / f'hand_{acc_thresh}_basin5_id_{hybas_id}.tif'
+            hand_raster =  hand_path / f'hand_acc_thresh_basin5_id_{hybas_id}.tif'
 
             try:
-                calculate_hand_for_basins(hand_raster, basin_geo, fabdem_vrt, acc_thresh=acc_thresh)
+                print("calculate_hand_for_basins ...")
+                calculate_hand_for_basins(hand_raster, basin_geo, fabdem_vrt, acc_thresh=acc_thresh, hybas_id=hybas_id)
+            
             except np.core._exceptions._ArrayMemoryError as e:
                 print(f"Exception message: {e}")
-                log_error_ids(hybas_id)
+                log_error_ids(hybas_id, dst_err_ids)
 
             end_time = time.time()
             elapsed_time = end_time - start_time

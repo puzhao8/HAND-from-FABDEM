@@ -72,21 +72,26 @@ def unzip_all_files_in_folder(folder, extract_to):
 
 
 if __name__ == "__main__":
+    
+  # os.chdir("/home/jovyan/exchange/projects/HAND-from-FABDEM")
+  # print("Current Working Directory:", os.getcwd())
 
   # FABDEM: https://data.bris.ac.uk/data/dataset/s5hqmjcdj8yo2ibzi9b4ew3sn
   url_root = "https://data.bris.ac.uk/datasets/s5hqmjcdj8yo2ibzi9b4ew3sn/" 
-  filename = "N10E010-N20E020_FABDEM_V1-2.zip"
 
-  region = "sa"
+  region = "eu"
 
-  hydroBASIN = gpd.read_file(f"hydroBASIN/hybas_{region}_lev05_v1c.zip")
+  hydroBASIN = gpd.read_file(f"data/hydroBASIN/hybas_{region}_lev05_v1c.zip")
   tiles = gpd.read_file("data/FABDEM_v1-2_tiles.geojson")
 
   tiles_filtered = gpd.sjoin(hydroBASIN, tiles, how='inner', predicate='intersects')
   zipFileList = tiles_filtered.zipfile_name.unique()
   print(f"number of tiles in {region}: {len(zipFileList)}")
 
-  existedList = os.listdir("data/FABDEM/sa_zip")
+  dst_folder = Path(f"data/FABDEM/zips")
+  dst_folder.mkdir(exist_ok=True, parents=True)
+  
+  existedList = os.listdir(dst_folder)
   zipFileList = [f for f in zipFileList if f not in existedList]
   print(f"zipFileList len: {len(zipFileList)}")
   print("zipFileList")
@@ -95,12 +100,16 @@ if __name__ == "__main__":
   if True:
     # download zipfiles
     url_list = [url_root + zipFile for zipFile in zipFileList]
-    dst_folder = Path(f"data/FABDEM/{region}_zip")
-    dst_folder.mkdir(exist_ok=True, parents=True)
     download_files_in_parallel(urls=url_list, dst_folder=dst_folder)
 
     # extract zip files into folder 
-    dem_folder = Path(f"data/FABDEM/{region}")
-    unzip_all_files_in_folder(dst_folder, dem_folder)
+    tile_folder = Path(f"data/FABDEM/tiles")
+    
+    # unzip_all_files_in_folder(dst_folder, dem_folder)
+    # extract zip files one by one
+    for filename in zipFileList:
+        if filename.endswith('.zip'):
+            zip_filepath = os.path.join(dst_folder, filename)
+            unzip_file(zip_filepath, tile_folder)
 
 
