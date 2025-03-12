@@ -102,10 +102,11 @@ if __name__ == "__main__":
 
     # FABDEM: https://data.bris.ac.uk/data/dataset/s5hqmjcdj8yo2ibzi9b4ew3sn
     url_root = "https://data.bris.ac.uk/datasets/s5hqmjcdj8yo2ibzi9b4ew3sn/" 
-    # wget https://data.bris.ac.uk/datasets/s5hqmjcdj8yo2ibzi9b4ew3sn/N30E050-N40E060_FABDEM_V1-2.zip
+
+    # wget https://data.bris.ac.uk/datasets/s5hqmjcdj8yo2ibzi9b4ew3sn/N40E010-N50E020_FABDEM_V1-2.zip data/FABDEM
+    # unzip data/FABDEM/N40E010-N50E020_FABDEM_V1-2.zip -d data/FABDEM/tiles
 
     # region = "sa"
-
     # hydroBASIN = gpd.read_file(f"hydroBASIN/hybas_{region}_lev05_v1c.zip")
     # tiles = gpd.read_file("data/FABDEM_v1-2_tiles.geojson")
 

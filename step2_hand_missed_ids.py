@@ -105,55 +105,70 @@ if __name__ == "__main__":
     Path("outputs").mkdir(exist_ok=True, parents=True)
 
     # Italy, northern Algeria, Kenya, Uganda, South Africa / East Africa, Australia 
-    country_name = "sa"
-    region = 'sa' # sa, af, eu: note, region and country_name need to be consistent
+    country_name = "eu"
+    region = 'eu' # sa, af, eu: note, region and country_name need to be consistent
     query_id_by_country = False # True for querying hybas_id by country, False by HydroBASIN
 
     BASIN_LEVEL = 5
     acc_thresh = [100, 1000, 100000] # List of Integers, specify a list of accumulation thresholds
-    fabdem_path = Path("data\FABDEM/tiles/mFABDEM")
-    # fabdem_path = Path("//dkcph1-nas02/jupyterhub-exchange/puzhao8/projects/HAND-from-FABDEM/data/FABDEM/tiles")
+    # fabdem_path = Path("data\FABDEM/tiles/FABDEM")
+    fabdem_path = Path("//dkcph1-nas02/jupyterhub-exchange/puzhao8/projects/HAND-from-FABDEM/data/FABDEM/tiles")
 
     hand_path = Path(f"outputs/hand_uint16_test")
     hand_path.mkdir(exist_ok=True, parents=True)
     
     # TODO: change basin source!
-    hydroBASIN = gpd.read_file(f"data/hydroBASIN/hybas_{region}_lev05_v1c.zip")
+    basin_lv5 = gpd.read_file(f"data/hydroBASIN/hybas_{region}_lev05_v1c.zip")
+    basin_lv6 = gpd.read_file(f"data/hydroBASIN/hybas_{region}_lev06_v1c.zip")
+    
 
-    if BASIN_LEVEL == 6:
-        # basin level 6
-        print(f"basin level: {BASIN_LEVEL}")
-        from constant import sa_missing_ids_lv6 as missing_ids_lv6
-        pprint(f"missing ids: {len(missing_ids_lv6)}")
-        pprint(missing_ids_lv6)
+    # input_string = """  2050014550
+    #                     2050059510
+    #                     2050062920
+    #                     2050070050 """
+    # lines = input_string.strip().split('\n')
+    # integer_list = [int(line) for line in lines]
 
-        basin_lv6 = gpd.read_file(f"data/hydroBASIN/hybas_{region}_lev06_v1c.zip")
-        hydroBASIN = basin_lv6[basin_lv6.HYBAS_ID.isin(missing_ids_lv6)]
-        print(hydroBASIN)
+    level5_ids_of_interest = [2050014550, 2050059510, 2050062920, 2050070050,  2050645210,  2050645200, 2050643510, 2050616770]
+    level5_basins_of_interest = basin_lv5[basin_lv5['HYBAS_ID'].isin(level5_ids_of_interest)]
+
+    # level6_basins_of_interest = gpd.sjoin(basin_lv6, level5_basins_of_interest, how='inner', predicate='within')
+    hydroBASIN = basin_lv6[basin_lv6.intersects(level5_basins_of_interest.unary_union)]
+
+    # if BASIN_LEVEL == 6:
+    #     # basin level 6
+    #     print(f"basin level: {BASIN_LEVEL}")
+    #     from constant import sa_missing_ids_lv6 as missing_ids_lv6
+    #     pprint(f"missing ids: {len(missing_ids_lv6)}")
+    #     pprint(missing_ids_lv6)
+
+    #     basin_lv6 = gpd.read_file(f"data/hydroBASIN/hybas_{region}_lev06_v1c.zip")
+    #     hydroBASIN = basin_lv6[basin_lv6.HYBAS_ID.isin(missing_ids_lv6)]
+    #     print(hydroBASIN)
 
     if query_id_by_country: # query hybas_id by country
         print(f"query hybas_id by country: {country_name}.")
         from step1_download_fabdem_by_country import query_by_country
         _, hybas_ids = query_by_country(country_name=country_name)
 
-        dst_err_ids=f'outputs/{country_name}_error_ids.txt' # where to save error hybas_id
+        dst_err_ids=f'outputs/{country_name}_error_ids_basin6.txt' # where to save error hybas_id
                
     else: # query hybas_id from HydroBASIN
         print(f"query hybas_id from HydroBASIN for region: {region}.")
         hybas_ids = hydroBASIN.HYBAS_ID.unique()
 
-        dst_err_ids=f'outputs/{region}_error_ids.txt' # where to save error hybas_id
+        dst_err_ids=f'outputs/{region}_error_ids_basin6.txt' # where to save error hybas_id
 
     print('hybas_ids')
     pprint(hybas_ids)
     print(f'{len(hybas_ids)} basins to be generted ...')
     print()
 
-    for idx, hybas_id in enumerate(tqdm([6050280410])): # 2050014550, 6050029730
-    # for idx, hybas_id in enumerate(tqdm(hybas_ids)): # 6050068100, 6050000740
+    # for idx, hybas_id in enumerate(tqdm([6050280410])): # 2050014550, 6050029730
+    for idx, hybas_id in enumerate(tqdm(hybas_ids)): # 6050068100, 6050000740
     # for idx, hybas_id in enumerate(tqdm(hydroBASIN.HYBAS_ID.unique())): #  6050069460, 6050001940, 6050266740
 
-        if (idx >= 0):
+        if (idx >= 14):
 
             basin = hydroBASIN[hydroBASIN.HYBAS_ID==hybas_id] # 6050069460
 

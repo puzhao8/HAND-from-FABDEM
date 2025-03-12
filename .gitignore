@@ -10,3 +10,5 @@ tutorials
 satellogic.py
 hand_acc100
 hand_acc100_uint16
+data/FABDEM
+data/hydroBASIN
