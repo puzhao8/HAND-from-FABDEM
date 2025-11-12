@@ -79,7 +79,7 @@ if __name__ == "__main__":
   # FABDEM: https://data.bris.ac.uk/data/dataset/s5hqmjcdj8yo2ibzi9b4ew3sn
   url_root = "https://data.bris.ac.uk/datasets/s5hqmjcdj8yo2ibzi9b4ew3sn/" 
 
-  region = "eu"
+  region = "as"
 
   hydroBASIN = gpd.read_file(f"data/hydroBASIN/hybas_{region}_lev05_v1c.zip")
   tiles = gpd.read_file("data/FABDEM_v1-2_tiles.geojson")

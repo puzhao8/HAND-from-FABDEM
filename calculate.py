@@ -26,7 +26,7 @@ log = logging.getLogger(__name__)
 
 from osgeo import gdal
 from asf_tools.util import epsg_to_wkt
-from typing import List, Literal, Union
+from typing import List, Union
 
 def write_cog(file_name: Union[str, Path], data: np.ndarray, transform: List[float], epsg_code: int,
               dtype=gdal.GDT_Float32, nodata_value=None):
@@ -61,6 +61,26 @@ def write_cog(file_name: Union[str, Path], data: np.ndarray, transform: List[flo
       del temp_geotiff  # How to close w/ gdal
 
     return file_name
+
+def _resolve_epsg_code(crs, fallback: int = 4326) -> int:
+    """Return an integer EPSG code for the provided CRS."""
+    if crs is None:
+        log.warning(f"CRS is undefined; falling back to EPSG:{fallback}")
+        return fallback
+
+    epsg = getattr(crs, "to_epsg", lambda: None)()
+    if epsg is not None:
+        return int(epsg)
+
+    authority = getattr(crs, "to_authority", lambda: None)()
+    if authority and len(authority) == 2:
+        try:
+            return int(authority[1])
+        except (TypeError, ValueError):
+            pass
+
+    log.warning(f"Unable to derive EPSG code from CRS {crs}; falling back to EPSG:{fallback}")
+    return fallback
 
 def fill_nan(array: np.ndarray) -> np.ndarray:
     """Replace NaNs with values interpolated from their neighbors
@@ -139,8 +159,9 @@ def calculate_hand(dem_array, dem_affine: rasterio.Affine, dem_crs: rasterio.crs
     dem_folder = Path("outputs/dem")
     dem_folder.mkdir(exist_ok=True, parents=True)
     dem_url = str(dem_folder / f"dem_{hybas_id}.tif")
+    epsg_code = _resolve_epsg_code(dem_crs)
     write_cog(dem_url, dem_array,
-                  transform=dem_affine.to_gdal(), epsg_code=dem_crs.to_epsg(),
+                  transform=dem_affine.to_gdal(), epsg_code=epsg_code,
                   # Prevents PySheds from assuming using zero as the nodata value
                   nodata_value=nodata_fill_value)
 
@@ -235,6 +256,9 @@ def calculate_hand_for_basins(out_raster:  Union[str, Path], geometries: Geometr
     nodata_value_uint32 = 4294967295
 
     with rasterio.open(dem_file) as src:
+        epsg_code = _resolve_epsg_code(src.crs)
+        print(f'EPSG: {epsg_code}')
+
         basin_mask, basin_affine_tf, basin_window = rasterio.mask.raster_geometry_mask(
             src, geometries.geoms, all_touched=True, crop=True, pad=True, pad_width=1
         )
@@ -254,7 +278,7 @@ def calculate_hand_for_basins(out_raster:  Union[str, Path], geometries: Geometr
         # Loop over all acc_thresh.
         for acc_th, hand in zip(acc_thresh, hand_list):
             hand_url = hand_dir / filename.replace('acc_thresh', str(acc_th))
-            write_cog(hand_url, to_uint16(hand * 10), transform=basin_affine_tf.to_gdal(), epsg_code=src.crs.to_epsg(), nodata_value=nodata_value_uint16, dtype=gdal.GDT_UInt16) # np.nan
+            write_cog(hand_url, to_uint16(hand * 10), transform=basin_affine_tf.to_gdal(), epsg_code=epsg_code, nodata_value=nodata_value_uint16, dtype=gdal.GDT_UInt16) # np.nan
             
 
         flow_acc_folder = Path(f"outputs/flow_acc_uint32")
@@ -262,5 +286,5 @@ def calculate_hand_for_basins(out_raster:  Union[str, Path], geometries: Geometr
         flow_acc_url = flow_acc_folder / f"flow_acc_basin{filename.split('basin')[-1]}" # flow_acc_basin5_id_6050942390.tif
         
         # write_cog(flow_acc_url, flow_acc, transform=basin_affine_tf.to_gdal(), epsg_code=src.crs.to_epsg(), nodata_value=nodata_value, dtype=gdal.GDT_UInt16)
-        write_cog(flow_acc_url, to_uint32(flow_acc, nodata_value=0), transform=basin_affine_tf.to_gdal(), epsg_code=src.crs.to_epsg(), nodata_value=0, dtype=gdal.GDT_UInt32) # UInt32
+        write_cog(flow_acc_url, to_uint32(flow_acc, nodata_value=0), transform=basin_affine_tf.to_gdal(), epsg_code=epsg_code, nodata_value=0, dtype=gdal.GDT_UInt32) # UInt32
         

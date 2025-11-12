@@ -28,6 +28,52 @@ gdal.UseExceptions()
 ogr.UseExceptions()
 
 
+from shapely import wkt
+from shapely.geometry import box
+import pystac_client
+from shapely.geometry import Polygon, shape
+from pystac import ItemCollection
+import planetary_computer
+
+
+def query_nasadem_by_geometry(geometry):
+    """Query NASADEM items using STAC API spatial search"""
+    
+    # Create STAC client
+    catalog = pystac_client.Client.open(
+        "https://planetarycomputer.microsoft.com/api/stac/v1"
+    )
+    
+    # Search for NASADEM items intersecting the geometry
+    search = catalog.search(
+        collections=["nasadem"],
+        intersects=geometry.__geo_interface__,
+        max_items=50  # Adjust based on your needs
+    )
+    
+    items = search.item_collection()
+    print(f"Found {len(items)} NASADEM items")
+    
+    return items
+
+def get_dem_tiles(basin):
+
+    if hasattr(basin, "total_bounds"):                 # GeoDataFrame / GeoSeries
+        min_lon, min_lat, max_lon, max_lat = basin.total_bounds
+    else:
+        min_lon, min_lat, max_lon, max_lat = basin.bounds  # Shapely geometry
+    
+    bbox_geometry = box(min_lon, min_lat, max_lon, max_lat)
+
+    # Query NASADEM for Armenia
+    items = query_nasadem_by_geometry(bbox_geometry)
+
+    # Sign and download items
+    signed_items = [planetary_computer.sign(item) for item in items]
+    tile_names = [f"{item.id}.tif" for item in signed_items]
+    return tile_names
+
+
 def prepare_fabdem_vrt(vrt: Union[str, Path], geometry: Union[ogr.Geometry, BaseGeometry], dem='fabdem', fabdem_path='DEM/FABDEM'):
     """Create a DEM mosaic VRT covering a given geometry
 
@@ -41,37 +87,40 @@ def prepare_fabdem_vrt(vrt: Union[str, Path], geometry: Union[ogr.Geometry, Base
 
     """
 
-    if 'fabdem' == dem:
-        DEM_GEOJSON = 'data/FABDEM_v1-2_tiles.geojson'
+    dem_file_names = get_dem_tiles(geometry)
+    dem_file_paths = [str(fabdem_path / filename) for filename in dem_file_names if (fabdem_path / filename).exists()]
 
-    with GDALConfigManager(GDAL_DISABLE_READDIR_ON_OPEN='EMPTY_DIR'):
-        if isinstance(geometry, BaseGeometry):
-            geometry = ogr.CreateGeometryFromWkb(geometry.wkb)
+    # if 'fabdem' == dem:
+    #     DEM_GEOJSON = 'data/FABDEM_v1-2_tiles.geojson'
 
-        min_lon, max_lon, _, _ = geometry.GetEnvelope()
-        if min_lon < -160. and max_lon > 160.:
-            raise ValueError(f'asf_tools does not currently support geometries that cross the antimeridian: {geometry}')
+    # with GDALConfigManager(GDAL_DISABLE_READDIR_ON_OPEN='EMPTY_DIR'):
+    #     if isinstance(geometry, BaseGeometry):
+    #         geometry = ogr.CreateGeometryFromWkb(geometry.wkb)
 
-        tile_features = vector.get_features(DEM_GEOJSON)
-        if not vector.get_property_values_for_intersecting_features(geometry, tile_features):
-            # return 
-            raise ValueError(f'Copernicus GLO-30 DEM does not intersect this geometry: {geometry}')
+    #     min_lon, max_lon, _, _ = geometry.GetEnvelope()
+    #     if min_lon < -160. and max_lon > 160.:
+    #         raise ValueError(f'asf_tools does not currently support geometries that cross the antimeridian: {geometry}')
+
+    #     tile_features = vector.get_features(DEM_GEOJSON)
+    #     if not vector.get_property_values_for_intersecting_features(geometry, tile_features):
+    #         # return 
+    #         raise ValueError(f'Copernicus GLO-30 DEM does not intersect this geometry: {geometry}')
 
 
-        if 'fabdem' == dem:
-          dem_file_names = vector.intersecting_feature_properties(geometry, tile_features, 'file_name')
+    #     if 'fabdem' == dem:
+    #       dem_file_names = vector.intersecting_feature_properties(geometry, tile_features, 'file_name')
 
-          # fabdem_path = Path("C:/DHI/HAND/DEM/N00W080-N10W070_FABDEM_V1-2")
-          fabdem_path = Path(fabdem_path)
-          dem_file_paths = [str(fabdem_path / filename) for filename in dem_file_names]
+    #       # fabdem_path = Path("C:/DHI/HAND/DEM/N00W080-N10W070_FABDEM_V1-2")
+    #       fabdem_path = Path(fabdem_path)
+    #       dem_file_paths = [str(fabdem_path / filename) for filename in dem_file_names]
 
-        else:
-            dem_file_paths = vector.intersecting_feature_properties(geometry, tile_features, 'file_path')
+    #     else:
+    #         dem_file_paths = vector.intersecting_feature_properties(geometry, tile_features, 'file_path')
 
-        print()
-        pprint(f"gdalbuildvrt {str(vrt)} {' '.join(dem_file_paths)}")
-        gdal.BuildVRT(str(vrt), dem_file_paths)
-        # subprocess.run(f"gdalbuildvrt {str(vrt)} {' '.join(dem_file_paths)}") #TODO: this line didn't work, check why.
+    print()
+    pprint(f"gdalbuildvrt {str(vrt)} {' '.join(dem_file_paths)}")
+    gdal.BuildVRT(str(vrt), dem_file_paths)
+    # subprocess.run(f"gdalbuildvrt {str(vrt)} {' '.join(dem_file_paths)}") #TODO: this line didn't work, check why.
 
 
 # import re
@@ -149,14 +198,14 @@ if __name__ == "__main__":
     
 
     # Italy, northern Algeria, Kenya, Uganda, South Africa / East Africa, Australia 
-    country_name = "as"
+    country_name = "eu"
     query_id_by_country = False # True for querying hybas_id by country, False by HydroBASIN
-    region = 'as' # sa, as, af, eu: note, region and country_name need to be consistent
+    region = 'eu' # sa, as, af, eu: note, region and country_name need to be consistent
     level = 6
 
     acc_thresh = [100, 1000, 100000] # List of Integers, specify a list of accumulation thresholds
     # fabdem_path = Path("data/FABDEM/tiles")
-    fabdem_path = Path(f"//dkcph1-nas02/jupyterhub-exchange/puzhao8/projects/HAND-from-FABDEM/data/FABDEM_{region}/tiles")
+    fabdem_path = Path(r"D:\puzh\HAND-from-FABDEM\outputs\strm_dem_tiles")
 
     save_dir = Path(f"outputs_{region}")
     save_dir.mkdir(exist_ok=True, parents=True)
@@ -167,7 +216,7 @@ if __name__ == "__main__":
     hydroBASIN = gpd.read_file(f"data/hydroBASIN/hybas_{region}_lev0{level}_v1c.zip")
 
     # basin level 6
-    from constant import east_asia_ids_lv6 as missing_ids_lv6
+    from constant import amenia_lv6 as missing_ids_lv6
     basin_lv6 = gpd.read_file(f"data/hydroBASIN/hybas_{region}_lev0{level}_v1c.zip")
     hydroBASIN = basin_lv6[basin_lv6.HYBAS_ID.isin(missing_ids_lv6)]
     print(hydroBASIN)
@@ -210,6 +259,7 @@ if __name__ == "__main__":
 
             basin_geo_buff = basin.geometry.to_crs("EPSG:3857").buffer(0.2).to_crs("EPSG:4326")
             basin_geo = GeometryCollection([basin_geo_buff])[0]
+            basin_geo_union = basin_geo_buff.unary_union
 
             start_time = time.time()
 
@@ -217,7 +267,7 @@ if __name__ == "__main__":
                 vrt_dir = save_dir / "vrt"
                 vrt_dir.mkdir(exist_ok=True, parents=True)
                 fabdem_vrt = vrt_dir / f'fabdem_basin{level}_id_{hybas_id}.vrt'
-                prepare_fabdem_vrt(vrt=str(fabdem_vrt), geometry=basin_geo, dem='fabdem', fabdem_path=fabdem_path)
+                prepare_fabdem_vrt(vrt=str(fabdem_vrt), geometry=basin_geo_union, dem='fabdem', fabdem_path=fabdem_path)
 
                 from calculate import calculate_hand_for_basins
                 hand_raster =  hand_path / f'hand_acc_thresh_basin{level}_id_{hybas_id}.tif'
